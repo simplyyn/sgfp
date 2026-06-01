@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
-from app import db, login_manager
+from extensions import db, login_manager
 from models import Usuario, Movimentacao
 
 main = Blueprint('main', __name__)

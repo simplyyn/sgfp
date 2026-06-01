@@ -1,13 +1,9 @@
 import os
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
 from dotenv import load_dotenv
+from extensions import db, login_manager
 
 load_dotenv()
-
-db = SQLAlchemy()
-login_manager = LoginManager()
 
 
 def create_app():
@@ -27,6 +23,7 @@ def create_app():
     app.register_blueprint(main)
 
     with app.app_context():
+        import models  # noqa: garante que os models são registrados antes do create_all
         db.create_all()
 
     return app
