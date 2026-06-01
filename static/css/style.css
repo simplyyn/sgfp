@@ -1,0 +1,33 @@
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.navbar {
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.card {
+    border-radius: 10px;
+}
+
+.card-header {
+    font-weight: 600;
+}
+
+.table th {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #6c757d;
+}
+
+.badge {
+    font-size: 0.75rem;
+    padding: 0.35em 0.6em;
+}
+
+/* destaque no saldo negativo */
+.saldo-negativo {
+    color: #dc3545 !important;
+}
