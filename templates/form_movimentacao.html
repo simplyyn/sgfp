@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}{{ acao }} Movimentação - SGFP{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-3">
+                <h5 class="mb-0">{{ acao }} Movimentação</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Tipo</label>
+                        <select name="tipo" class="form-select" required>
+                            <option value="">Selecione...</option>
+                            <option value="receita"
+                                {% if movimentacao and movimentacao.tipo == 'receita' %}selected{% endif %}>
+                                Receita
+                            </option>
+                            <option value="despesa"
+                                {% if movimentacao and movimentacao.tipo == 'despesa' %}selected{% endif %}>
+                                Despesa
+                            </option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Categoria</label>
+                        <input type="text" name="categoria" class="form-control" required
+                               value="{{ movimentacao.categoria if movimentacao else '' }}"
+                               placeholder="Ex: Alimentação, Salário, Aluguel...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descrição</label>
+                        <input type="text" name="descricao" class="form-control" required
+                               value="{{ movimentacao.descricao if movimentacao else '' }}"
+                               placeholder="Descreva a movimentação">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Valor (R$)</label>
+                            <input type="text" name="valor" class="form-control" required
+                                   value="{{ '%.2f'|format(movimentacao.valor) if movimentacao else '' }}"
+                                   placeholder="0,00">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Data</label>
+                            <input type="date" name="data" class="form-control" required
+                                   value="{{ movimentacao.data.strftime('%Y-%m-%d') if movimentacao else '' }}">
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Salvar</button>
+                        <a href="{{ url_for('main.movimentacoes') }}" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard - SGFP{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4>Olá, {{ current_user.nome.split()[0] }} 👋</h4>
+    <a href="{{ url_for('main.nova_movimentacao') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> Nova movimentação
+    </a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Receitas totais</p>
+                <h4 class="text-success fw-bold">R$ {{ '%.2f'|format(total_receitas) }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Despesas totais</p>
+                <h4 class="text-danger fw-bold">R$ {{ '%.2f'|format(total_despesas) }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Saldo atual</p>
+                <h4 class="fw-bold {% if saldo >= 0 %}text-primary{% else %}text-danger{% endif %}">
+                    R$ {{ '%.2f'|format(saldo) }}
+                </h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Receitas x Despesas</h6>
+                    <select id="selectAno" class="form-select form-select-sm w-auto">
+                        <option value="{{ ano_atual }}">{{ ano_atual }}</option>
+                        <option value="{{ ano_atual - 1 }}">{{ ano_atual - 1 }}</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                <canvas id="graficoAnual" height="120"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-0 pt-3">
+                <h6 class="mb-0">Últimas movimentações</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if recentes %}
+                <ul class="list-group list-group-flush">
+                    {% for m in recentes %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-3">
+                        <div>
+                            <span class="badge {% if m.tipo == 'receita' %}bg-success{% else %}bg-danger{% endif %} me-2">
+                                {{ m.tipo }}
+                            </span>
+                            <small>{{ m.descricao }}</small>
+                        </div>
+                        <span class="fw-semibold {% if m.tipo == 'receita' %}text-success{% else %}text-danger{% endif %}">
+                            R$ {{ '%.2f'|format(m.valor) }}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-inbox fs-3"></i>
+                    <p class="mt-2 mb-0 small">Nenhuma movimentação ainda.</p>
+                </div>
+                {% endif %}
+            </div>
+            {% if recentes %}
+            <div class="card-footer bg-white border-0 text-end">
+                <a href="{{ url_for('main.movimentacoes') }}" class="small">Ver todas</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let grafico = null;
+
+function carregarGrafico(ano) {
+    fetch(`/api/grafico?ano=${ano}`)
+        .then(r => r.json())
+        .then(data => {
+            const ctx = document.getElementById('graficoAnual').getContext('2d');
+            const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+            if (grafico) grafico.destroy();
+
+            grafico = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: meses,
+                    datasets: [
+                        {
+                            label: 'Receitas',
+                            data: data.receitas,
+                            backgroundColor: 'rgba(25, 135, 84, 0.7)',
+                        },
+                        {
+                            label: 'Despesas',
+                            data: data.despesas,
+                            backgroundColor: 'rgba(220, 53, 69, 0.7)',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        });
+}
+
+document.getElementById('selectAno').addEventListener('change', function() {
+    carregarGrafico(this.value);
+});
+
+carregarGrafico({{ ano_atual }});
+</script>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Cadastro - SGFP{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card shadow">
+            <div class="card-body p-4">
+                <h5 class="card-title text-center mb-4">Criar conta</h5>
+
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Nome</label>
+                        <input type="text" name="nome" class="form-control" required autofocus>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">E-mail</label>
+                        <input type="email" name="email" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Senha</label>
+                        <input type="password" name="senha" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirmar senha</label>
+                        <input type="password" name="confirmar_senha" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Cadastrar</button>
+                </form>
+
+                <hr>
+                <p class="text-center mb-0">
+                    Já tem conta? <a href="{{ url_for('main.login') }}">Faça login</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
