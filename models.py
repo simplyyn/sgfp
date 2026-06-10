@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
@@ -11,7 +11,7 @@ class Usuario(UserMixin, db.Model):
     nome = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
     senha_hash = db.Column(db.String(256), nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    criado_em = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     movimentacoes = db.relationship('Movimentacao', backref='usuario', lazy=True)
 
@@ -33,9 +33,9 @@ class Movimentacao(db.Model):
     tipo = db.Column(db.String(10), nullable=False)  # 'receita' ou 'despesa'
     categoria = db.Column(db.String(50), nullable=False)
     descricao = db.Column(db.String(200), nullable=False)
-    valor = db.Column(db.Float, nullable=False)
+    valor = db.Column(db.Numeric(10, 2), nullable=False)
     data = db.Column(db.Date, nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    criado_em = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     def __repr__(self):
         return f'<Movimentacao {self.tipo} {self.valor}>'

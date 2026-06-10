@@ -38,7 +38,7 @@
     </div>
 </div>
 
-<div class="row g-3">
+<div class="row g-3 mb-4">
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white border-0 pt-3">
@@ -93,36 +93,74 @@
         </div>
     </div>
 </div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Despesas por categoria</h6>
+                    <select id="selectMesDespesa" class="form-select form-select-sm w-auto">
+                        {% for n, nome in [(1,'Jan'),(2,'Fev'),(3,'Mar'),(4,'Abr'),(5,'Mai'),(6,'Jun'),
+                                           (7,'Jul'),(8,'Ago'),(9,'Set'),(10,'Out'),(11,'Nov'),(12,'Dez')] %}
+                        <option value="{{ n }}" {% if n == mes_atual %}selected{% endif %}>{{ nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="card-body d-flex justify-content-center">
+                <canvas id="graficoDespesas" style="max-height:220px"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 pt-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Receitas por categoria</h6>
+                    <select id="selectMesReceita" class="form-select form-select-sm w-auto">
+                        {% for n, nome in [(1,'Jan'),(2,'Fev'),(3,'Mar'),(4,'Abr'),(5,'Mai'),(6,'Jun'),
+                                           (7,'Jul'),(8,'Ago'),(9,'Set'),(10,'Out'),(11,'Nov'),(12,'Dez')] %}
+                        <option value="{{ n }}" {% if n == mes_atual %}selected{% endif %}>{{ nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="card-body d-flex justify-content-center">
+                <canvas id="graficoReceitas" style="max-height:220px"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-let grafico = null;
+const ANO_ATUAL = {{ ano_atual }};
+const CORES = [
+    '#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f',
+    '#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac'
+];
 
-function carregarGrafico(ano) {
+let graficoAnual = null;
+let graficoDespesas = null;
+let graficoReceitas = null;
+
+function carregarGraficoAnual(ano) {
     fetch(`/api/grafico?ano=${ano}`)
         .then(r => r.json())
         .then(data => {
             const ctx = document.getElementById('graficoAnual').getContext('2d');
             const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-
-            if (grafico) grafico.destroy();
-
-            grafico = new Chart(ctx, {
+            if (graficoAnual) graficoAnual.destroy();
+            graficoAnual = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: meses,
                     datasets: [
-                        {
-                            label: 'Receitas',
-                            data: data.receitas,
-                            backgroundColor: 'rgba(25, 135, 84, 0.7)',
-                        },
-                        {
-                            label: 'Despesas',
-                            data: data.despesas,
-                            backgroundColor: 'rgba(220, 53, 69, 0.7)',
-                        }
+                        { label: 'Receitas', data: data.receitas, backgroundColor: 'rgba(25, 135, 84, 0.7)' },
+                        { label: 'Despesas', data: data.despesas, backgroundColor: 'rgba(220, 53, 69, 0.7)' }
                     ]
                 },
                 options: {
@@ -134,10 +172,59 @@ function carregarGrafico(ano) {
         });
 }
 
-document.getElementById('selectAno').addEventListener('change', function() {
-    carregarGrafico(this.value);
+function carregarPizza(canvasId, tipo, mes, chartRef, setter) {
+    fetch(`/api/grafico-categorias?tipo=${tipo}&mes=${mes}&ano=${ANO_ATUAL}`)
+        .then(r => r.json())
+        .then(data => {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            if (chartRef) chartRef.destroy();
+            if (!data.labels.length) {
+                setter(null);
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.canvas.style.display = 'none';
+                return;
+            }
+            ctx.canvas.style.display = '';
+            const chart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        data: data.valores,
+                        backgroundColor: CORES.slice(0, data.labels.length),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 12 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ` R$ ${ctx.parsed.toFixed(2)}`
+                            }
+                        }
+                    }
+                }
+            });
+            setter(chart);
+        });
+}
+
+document.getElementById('selectAno').addEventListener('change', function () {
+    carregarGraficoAnual(this.value);
 });
 
-carregarGrafico({{ ano_atual }});
+document.getElementById('selectMesDespesa').addEventListener('change', function () {
+    carregarPizza('graficoDespesas', 'despesa', this.value, graficoDespesas, c => graficoDespesas = c);
+});
+
+document.getElementById('selectMesReceita').addEventListener('change', function () {
+    carregarPizza('graficoReceitas', 'receita', this.value, graficoReceitas, c => graficoReceitas = c);
+});
+
+carregarGraficoAnual(ANO_ATUAL);
+carregarPizza('graficoDespesas', 'despesa', {{ mes_atual }}, null, c => graficoDespesas = c);
+carregarPizza('graficoReceitas', 'receita', {{ mes_atual }}, null, c => graficoReceitas = c);
 </script>
 {% endblock %}

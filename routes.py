@@ -1,15 +1,21 @@
-from datetime import date, datetime
-from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
+import csv
+import io
+from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
+from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, Response
 from flask_login import login_user, logout_user, login_required, current_user
+from sqlalchemy import func
 from extensions import db, login_manager
 from models import Usuario, Movimentacao
 
 main = Blueprint('main', __name__)
 
+PER_PAGE = 15
+
 
 @login_manager.user_loader
 def load_user(user_id):
-    return Usuario.query.get(int(user_id))
+    return db.session.get(Usuario, int(user_id))
 
 
 @main.route('/')
@@ -32,6 +38,10 @@ def cadastro():
 
         if not nome or not email or not senha:
             flash('Preencha todos os campos.', 'danger')
+            return render_template('cadastro.html')
+
+        if len(senha) < 6:
+            flash('A senha deve ter pelo menos 6 caracteres.', 'danger')
             return render_template('cadastro.html')
 
         if senha != confirmar:
@@ -85,13 +95,11 @@ def logout():
 @login_required
 def dashboard():
     hoje = date.today()
-    mes_atual = hoje.month
-    ano_atual = hoje.year
 
-    movimentacoes = Movimentacao.query.filter_by(usuario_id=current_user.id).all()
-
-    total_receitas = sum(m.valor for m in movimentacoes if m.tipo == 'receita')
-    total_despesas = sum(m.valor for m in movimentacoes if m.tipo == 'despesa')
+    total_receitas = db.session.query(func.sum(Movimentacao.valor))\
+        .filter_by(usuario_id=current_user.id, tipo='receita').scalar() or Decimal(0)
+    total_despesas = db.session.query(func.sum(Movimentacao.valor))\
+        .filter_by(usuario_id=current_user.id, tipo='despesa').scalar() or Decimal(0)
     saldo = total_receitas - total_despesas
 
     recentes = (Movimentacao.query
@@ -105,8 +113,8 @@ def dashboard():
                            total_despesas=total_despesas,
                            saldo=saldo,
                            recentes=recentes,
-                           mes_atual=mes_atual,
-                           ano_atual=ano_atual)
+                           mes_atual=hoje.month,
+                           ano_atual=hoje.year)
 
 
 @main.route('/movimentacoes')
@@ -115,56 +123,63 @@ def movimentacoes():
     tipo = request.args.get('tipo', '')
     data_inicio = request.args.get('data_inicio', '')
     data_fim = request.args.get('data_fim', '')
+    page = request.args.get('page', 1, type=int)
 
     query = Movimentacao.query.filter_by(usuario_id=current_user.id)
 
     if tipo in ('receita', 'despesa'):
         query = query.filter_by(tipo=tipo)
 
-    if data_inicio:
-        query = query.filter(Movimentacao.data >= datetime.strptime(data_inicio, '%Y-%m-%d').date())
+    try:
+        if data_inicio:
+            query = query.filter(Movimentacao.data >= datetime.strptime(data_inicio, '%Y-%m-%d').date())
+        if data_fim:
+            query = query.filter(Movimentacao.data <= datetime.strptime(data_fim, '%Y-%m-%d').date())
+    except ValueError:
+        flash('Data inválida no filtro.', 'warning')
 
-    if data_fim:
-        query = query.filter(Movimentacao.data <= datetime.strptime(data_fim, '%Y-%m-%d').date())
+    pagination = query.order_by(Movimentacao.data.desc()).paginate(
+        page=page, per_page=PER_PAGE, error_out=False
+    )
 
-    lista = query.order_by(Movimentacao.data.desc()).all()
+    return render_template('movimentacoes.html',
+                           movimentacoes=pagination.items,
+                           pagination=pagination,
+                           tipo=tipo,
+                           data_inicio=data_inicio,
+                           data_fim=data_fim)
 
-    return render_template('movimentacoes.html', movimentacoes=lista,
-                           tipo=tipo, data_inicio=data_inicio, data_fim=data_fim)
+
+def _parse_form_movimentacao(form):
+    tipo = form.get('tipo')
+    categoria = form.get('categoria', '').strip()
+    descricao = form.get('descricao', '').strip()
+    valor_str = form.get('valor', '')
+    data_str = form.get('data', '')
+
+    if not all([tipo, categoria, descricao, valor_str, data_str]):
+        return None, 'Preencha todos os campos.'
+
+    try:
+        valor = Decimal(valor_str.replace(',', '.'))
+        data = datetime.strptime(data_str, '%Y-%m-%d').date()
+    except (InvalidOperation, ValueError):
+        return None, 'Valor ou data inválidos.'
+
+    return {'tipo': tipo, 'categoria': categoria, 'descricao': descricao, 'valor': valor, 'data': data}, None
 
 
 @main.route('/movimentacoes/nova', methods=['GET', 'POST'])
 @login_required
 def nova_movimentacao():
     if request.method == 'POST':
-        tipo = request.form.get('tipo')
-        categoria = request.form.get('categoria', '').strip()
-        descricao = request.form.get('descricao', '').strip()
-        valor = request.form.get('valor')
-        data_str = request.form.get('data')
-
-        if not all([tipo, categoria, descricao, valor, data_str]):
-            flash('Preencha todos os campos.', 'danger')
+        dados, erro = _parse_form_movimentacao(request.form)
+        if erro:
+            flash(erro, 'danger')
             return render_template('form_movimentacao.html', acao='Nova')
 
-        try:
-            valor = float(valor.replace(',', '.'))
-            data = datetime.strptime(data_str, '%Y-%m-%d').date()
-        except ValueError:
-            flash('Valor ou data inválidos.', 'danger')
-            return render_template('form_movimentacao.html', acao='Nova')
-
-        mov = Movimentacao(
-            usuario_id=current_user.id,
-            tipo=tipo,
-            categoria=categoria,
-            descricao=descricao,
-            valor=valor,
-            data=data
-        )
-        db.session.add(mov)
+        db.session.add(Movimentacao(usuario_id=current_user.id, **dados))
         db.session.commit()
-
         flash('Movimentação cadastrada com sucesso!', 'success')
         return redirect(url_for('main.movimentacoes'))
 
@@ -177,28 +192,14 @@ def editar_movimentacao(id):
     mov = Movimentacao.query.filter_by(id=id, usuario_id=current_user.id).first_or_404()
 
     if request.method == 'POST':
-        tipo = request.form.get('tipo')
-        categoria = request.form.get('categoria', '').strip()
-        descricao = request.form.get('descricao', '').strip()
-        valor = request.form.get('valor')
-        data_str = request.form.get('data')
-
-        if not all([tipo, categoria, descricao, valor, data_str]):
-            flash('Preencha todos os campos.', 'danger')
+        dados, erro = _parse_form_movimentacao(request.form)
+        if erro:
+            flash(erro, 'danger')
             return render_template('form_movimentacao.html', acao='Editar', movimentacao=mov)
 
-        try:
-            mov.valor = float(valor.replace(',', '.'))
-            mov.data = datetime.strptime(data_str, '%Y-%m-%d').date()
-        except ValueError:
-            flash('Valor ou data inválidos.', 'danger')
-            return render_template('form_movimentacao.html', acao='Editar', movimentacao=mov)
-
-        mov.tipo = tipo
-        mov.categoria = categoria
-        mov.descricao = descricao
+        for campo, val in dados.items():
+            setattr(mov, campo, val)
         db.session.commit()
-
         flash('Movimentação atualizada!', 'success')
         return redirect(url_for('main.movimentacoes'))
 
@@ -228,8 +229,18 @@ def relatorio():
             .order_by(Movimentacao.data)
             .all())
 
-    total_receitas = sum(m.valor for m in movs if m.tipo == 'receita')
-    total_despesas = sum(m.valor for m in movs if m.tipo == 'despesa')
+    total_receitas = db.session.query(func.sum(Movimentacao.valor))\
+        .filter_by(usuario_id=current_user.id, tipo='receita')\
+        .filter(db.extract('month', Movimentacao.data) == mes)\
+        .filter(db.extract('year', Movimentacao.data) == ano)\
+        .scalar() or Decimal(0)
+
+    total_despesas = db.session.query(func.sum(Movimentacao.valor))\
+        .filter_by(usuario_id=current_user.id, tipo='despesa')\
+        .filter(db.extract('month', Movimentacao.data) == mes)\
+        .filter(db.extract('year', Movimentacao.data) == ano)\
+        .scalar() or Decimal(0)
+
     saldo = total_receitas - total_despesas
 
     return render_template('relatorio.html',
@@ -239,6 +250,33 @@ def relatorio():
                            saldo=saldo,
                            mes=mes,
                            ano=ano)
+
+
+@main.route('/relatorio/exportar-csv')
+@login_required
+def exportar_csv():
+    mes = request.args.get('mes', date.today().month, type=int)
+    ano = request.args.get('ano', date.today().year, type=int)
+
+    movs = (Movimentacao.query
+            .filter_by(usuario_id=current_user.id)
+            .filter(db.extract('month', Movimentacao.data) == mes)
+            .filter(db.extract('year', Movimentacao.data) == ano)
+            .order_by(Movimentacao.data)
+            .all())
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Data', 'Tipo', 'Categoria', 'Descrição', 'Valor'])
+    for m in movs:
+        writer.writerow([m.data.strftime('%d/%m/%Y'), m.tipo, m.categoria, m.descricao, str(m.valor)])
+
+    filename = f'relatorio_{ano}_{mes:02d}.csv'
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename={filename}'}
+    )
 
 
 @main.route('/api/grafico')
@@ -257,11 +295,28 @@ def api_grafico():
     for m in movs:
         i = m.data.month - 1
         if m.tipo == 'receita':
-            receitas_mes[i] += m.valor
+            receitas_mes[i] += float(m.valor)
         else:
-            despesas_mes[i] += m.valor
+            despesas_mes[i] += float(m.valor)
+
+    return jsonify({'receitas': receitas_mes, 'despesas': despesas_mes})
+
+
+@main.route('/api/grafico-categorias')
+@login_required
+def api_grafico_categorias():
+    mes = request.args.get('mes', date.today().month, type=int)
+    ano = request.args.get('ano', date.today().year, type=int)
+    tipo = request.args.get('tipo', 'despesa')
+
+    rows = (db.session.query(Movimentacao.categoria, func.sum(Movimentacao.valor))
+            .filter_by(usuario_id=current_user.id, tipo=tipo)
+            .filter(db.extract('month', Movimentacao.data) == mes)
+            .filter(db.extract('year', Movimentacao.data) == ano)
+            .group_by(Movimentacao.categoria)
+            .all())
 
     return jsonify({
-        'receitas': receitas_mes,
-        'despesas': despesas_mes
+        'labels': [r[0] for r in rows],
+        'valores': [float(r[1]) for r in rows]
     })
