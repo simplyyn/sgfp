@@ -6,3 +6,4 @@ instance/
 *.db
 .venv/
 venv/
+screenshots/package-lock.json
